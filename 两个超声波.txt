@@ -1,0 +1,363 @@
+#include<reg52.h> 
+#include <intrins.h> //
+#define uint unsigned int
+#define uchar unsigned char
+sbit rs=P0^7; //1602的数据/指令选择控制线
+sbit rw=P0^6; //1602的读写控制线
+sbit en=P0^5; //1602的使能控制线
+sbit trig1=P1^2; //超声波测距模块Trig
+sbit echo1=P1^1; //超声波测距模块Echo
+sbit trig2=P1^4; //超声波测距模块Trig
+sbit echo2=P1^3; //超声波测距模块Echo
+bit flag1; //触发信号标志位
+uchar count1; //中断累加 变量
+long int distance1; //测量所得距离
+uchar count2; //中断累加 变量
+long int distance2; //测量所得距离
+unsigned char rec[10];
+unsigned int a,c,d,e,f;
+unsigned char code table[ ]={'0','1','2','3','4','5','6','7','8','9'}; //定义字符数组显示数字
+void delay(uint n)
+{
+uint x,y;
+for(x=n;x>0;x--)
+for(y=110;y>0;y--);
+}
+void delayt(uint x)
+{
+uchar j;
+while(x-- > 0)
+{
+for(j = 0;j < 125;j++)
+{
+;
+}
+}
+}
+//***********************延时函数**********************************************
+void delay10ms(unsigned char c)   //误差 -0.000000000002us
+{
+    unsigned char a,b;
+	for(;c>0;c--)
+	    for(b=249;b>0;b--)
+	        for(a=17;a>0;a--);
+}
+//***********************写指令初始化*******************************
+void lcd_wcom(uchar com)
+{
+rs=0; //选择指令寄存器
+rw=0; //选择写
+P2=com; //把命令字送入P0
+delay(5); //延时一小会儿，让1602准备接收数据
+en=1; //使能线电平变化，命令送入1602的8位数据口,这点非常重要
+en=0;
+}
+//*********************写数据初始化*******************************
+void lcd_wdat(uchar dat)
+{
+rs=1; //选择数据寄存器
+rw=0; //选择写
+P2=dat; //把要显示的数据送入P0
+delay(5); //延时一小会儿，让1602准备接收数据,也就是检测忙信号，这点非常重要。
+en=1; //使能线电平变化，数据送入1602的8位数据口
+en=0;
+}
+//********************液晶屏初始化*********************************
+void lcd_init()
+{
+lcd_wcom(0x38); //8位数据，双列，5*7字形 ，用到功能设定指令
+lcd_wcom(0x0c); //开启显示屏，关光标，光标不闪烁，用到显示开关控制指令
+lcd_wcom(0x06); //显示地址递增，即写一个数据后，显示位置右移一位，用到了写入模式设置指令
+lcd_wcom(0x01); //清屏，用到了清屏指令
+lcd_wcom(0x80);
+}
+//***********************蓝牙串口初始化**************************************
+void inilanya()
+{
+SCON = 0x50;    //设置串行口寄存器工作方式1         允许串行接收
+TMOD = 0x21;	//设置定时器1的工作方式2 0010 0000
+PCON = 0x00;   //功率寄存器，设置比特率不加倍	
+TH1 = 0xFD;
+TL1 = 0xFD;        //设置波特率9600
+TR1 = 1;	   //定时器1使能
+}
+//******************让液晶显示特定字符1****************************
+void lcd_xianshi1()
+{
+lcd_wcom(0x80+0x40);
+lcd_wdat('D');
+lcd_wdat('i');
+lcd_wdat('s');
+lcd_wdat('t');
+lcd_wdat('a');
+lcd_wdat('n');
+lcd_wdat('c');
+lcd_wdat('1');
+lcd_wdat(':');
+lcd_wcom(0x80+0x4c);
+lcd_wdat('.');
+lcd_wcom(0x80+0x4e);//单位是厘米//
+lcd_wdat('c');
+lcd_wdat('m');
+}
+//******************让液晶显示特定字符2****************************
+void lcd_xianshi2()
+{
+lcd_wcom(0x80);
+lcd_wdat('D');
+lcd_wdat('i');
+lcd_wdat('s');
+lcd_wdat('t');
+lcd_wdat('a');
+lcd_wdat('n');
+lcd_wdat('c');
+lcd_wdat('2');
+lcd_wdat(':');
+lcd_wcom(0x80+0x0c);
+lcd_wdat('.');
+lcd_wcom(0x80+0x0e);//单位是厘米//
+lcd_wdat('c');
+lcd_wdat('m');
+}
+//*******************定时器初始化1*******************************
+void init_t0()
+{
+TMOD=0x01;
+TL0=0x66;
+TH0=0xfc; //1ms
+ET0=1;
+EA=1;
+}
+//*****************触使超声波启动1********************************
+void trigger1()
+{
+trig1=1;
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+trig1=0;
+}
+//*****************触使超声波启动2********************************
+void trigger2()
+{
+trig2=1;
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+_nop_();
+trig2=0;
+}
+//*****************超声波相应端口初始化1******************************
+void init_measuring1()
+{
+trig1=1;
+echo1=1;
+count1=0;
+}
+//*****************超声波相应端口初始化2******************************
+void init_measuring2()
+{
+trig2=1;
+echo2=1;
+count1=0;
+}	
+//******************距离测量1***********************************
+void measuring1()			
+{
+uchar l;
+uint h,y;
+TR0 = 1;
+while(echo1==1)
+{
+;
+}
+TR0 = 0;
+l = TL0;
+h = TH0;
+y = (h << 8) + l;
+y = y - 0xfc66;//us部分
+distance1 = y + 1000 * count1;//计算总时间,单位是微秒
+TL0 = 0x66;
+TH0 = 0xfc;
+delayt(30);
+distance1 = 3453* distance1 / 20000;//原始为：（0.34毫米/us）*时间/2//
+}
+//******************距离测量2***********************************
+void measuring2()			
+{
+uchar l;
+uint h,y;
+TR0 = 1;
+while(echo2==1)
+{
+;
+}
+TR0 = 0;
+l = TL0;
+h = TH0;
+y = (h << 8) + l;
+y = y - 0xfc66;//us部分
+distance2 = y + 1000 * count1;//计算总时间,单位是微秒
+TL0 = 0x66;
+TH0 = 0xfc;
+delayt(30);
+distance2 = 3453* distance2 / 20000;//原始为：（0.34毫米/us）*时间/2//
+}
+//*********************对测量结果进行显示1************************
+void display1(uint x)
+{
+uint qian,bai,shi,ge;
+qian=x/1000;
+bai=(x%1000/100);
+shi=(x%1000%100/10);
+ge=x%10;
+lcd_wcom(0x80+0x49);//单位是厘米//
+lcd_wdat(table[qian]);
+lcd_wdat(table[bai]);
+lcd_wdat(table[shi]);
+lcd_wcom(0x80+0x4d);
+lcd_wdat(table[ge]);
+}
+//*********************对测量结果进行显示2************************
+void display2(uint x)
+{
+uint qian,bai,shi,ge;
+qian=x/1000;
+bai=(x%1000/100);
+shi=(x%1000%100/10);
+ge=x%10;
+lcd_wcom(0x80+0x09);//单位是厘米//
+lcd_wdat(table[qian]);
+lcd_wdat(table[bai]);
+lcd_wdat(table[shi]);
+lcd_wcom(0x80+0x0d);
+lcd_wdat(table[ge]);
+}
+//************************发送一个字符串**************************************
+void SendStr(unsigned char *s)
+{
+	while(*s!='\0')// \0 表示字符串结束标志，
+	{
+	    RI=0;           //清楚标志位
+		delay10ms(4);
+		SBUF = *s;
+		while(!TI);
+		TI = 0;
+		s++;
+	}
+}
+//************************把数据转化为字符************************************
+void change(uint a)
+{
+    c=a/1000;
+    d=(a%1000/100);
+    e=(a%1000%100/10);
+	f=a%10;
+	rec[0]='d';
+	rec[1]='=';
+	rec[2]=table[c];
+	rec[3]=table[d];
+	rec[4]=table[e];
+	rec[5]='.';
+	rec[6]=table[f];
+	rec[7]='c';
+	rec[8]='m';
+	rec[9]='\n';
+}
+//********************主函数**************************************
+void main()
+{ 
+lcd_init(); //液晶初始化
+init_t0(); //定时器0初始化
+init_measuring1(); //超声波1相应端口初始化
+init_measuring2(); //超声波2相应端口初始化
+inilanya();
+while(1)
+{
+lcd_xianshi1(); //液晶显示特定字符
+lcd_xianshi2();
+trigger1(); //触发超声波启动
+
+
+
+       
+while(echo1==0) //等待回声
+{
+;
+}
+measuring1(); //进行距离测量
+display1(distance1); //对测量结果进行显示*/
+ trigger2();
+while(echo2==0) //等待回声
+{
+;
+}
+measuring2(); //进行距离测量
+display2(distance2); //对测量结果进行显示	
+
+
+											
+
+
+
+init_measuring1(); //超声波相应端口初始化
+init_measuring2(); //超声波相应端口初始化
+
+
+
+change(distance1);			
+SendStr(rec);	 
+delayt(600); //每次测量间隔60ms
+}
+}
+//*************************中断服务函数***********************************
+void T_0()interrupt 1
+{
+TF0 = 0;
+TL0 = 0x66;
+TH0 = 0xfc;
+count1++;
+if(count1==18)
+{
+TR0 =0;
+TL0 = 0x66;
+TH0 = 0xfc;
+count1 = 0;
+}
+} 
+
